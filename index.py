@@ -78,7 +78,7 @@ app.layout = html.Div([
             ])
         ], className='one-half column', id='title'),
         html.Div([
-            html.H6('Last Updated: ' + str(covid_data['date'].iloc[-1].strftime('%d %B de %Y')),
+            html.H6('Last Updated: ' + str(covid_data['date'].iloc[-1].strftime('%d/%m/%y')),
                     style={'color': 'orange'})
         ], className='one-third column', id='title1')
     ], id='header', className='row flex-display', style={'margin-botton': '25px'}),
@@ -174,9 +174,16 @@ app.layout = html.Div([
         html.Div([
             dcc.Graph(id='pie_chart', config={
                 'displayModeBar': 'hover'}
-            )
+            ),
 
-        ], className='create_container four columns')
+        ], className='create_container four columns'),
+
+        html.Div([
+            dcc.Graph(id='line_chart', config={
+                'displayModeBar': 'hover'}
+            ),
+
+        ], className='create_container four columns', style={'width': '35%'})
 
     ], className='row flex-display')
 ], id='mainContainer', style={'display': 'flex', 'flex-direction': 'column'})
@@ -326,7 +333,8 @@ def update_graph(w_countries):
                                    recovered_values, active_values],
                            marker=dict(colors=colors),
                            hoverinfo='label+value+percent',
-                           textinfo='label+value'
+                           textinfo='label+value',
+                           rotation=45
                            )],
            'layout': go.Layout(title={'text': 'Total cases in ' + (w_countries), 'y': 0.93, 'x': 0.5, 'xanchor': 'center', 'yanchor': 'top'},
                                titlefont={'color': 'white', 'size': 20},
@@ -337,6 +345,75 @@ def update_graph(w_countries):
                                hovermode='closest',
                                legend={
                                    'orientation': 'h', 'bgcolor': '#1f2c56', 'xanchor': 'center', 'x': 0.5, 'y': -0.7}
+                               )
+           }
+
+
+@app.callback(Output('line_chart', 'figure'), [Input('w_countries', 'value')])
+def update_graph(w_countries):
+    covid_data_byCountry = covid_data.groupby(
+        ['date', 'Country/Region'])[['confirmed', 'deaths', 'recovered', 'active']].sum().reset_index()
+
+    daily_confirmed = covid_data_byCountry[covid_data_byCountry['Country/Region']
+                                           == w_countries][['Country/Region', 'date', 'confirmed']].reset_index()
+
+    daily_confirmed['daily confirmed'] = daily_confirmed['confirmed'] - \
+        daily_confirmed['confirmed'].shift(1)
+
+    daily_confirmed['rolling average'] = daily_confirmed['daily confirmed'].rolling(
+        window=7).mean()
+
+    colors = ['orange', 'red', 'green', 'CornflowerBlue']
+
+    return{'data': [go.Bar(x=daily_confirmed['date'].tail(30),
+                           y=daily_confirmed['daily confirmed'].tail(30),
+                           name='Daily confirmed cases',
+                           marker=dict(color='orange'),
+                           hoverinfo='text',
+                           hovertext='<b>Date</b>: ' + daily_confirmed['date'].tail(30).astype(str) + '</br>' +
+                           '<b>Daily confirmed cases</b>: ' + [f'{x:,.0f}' for x in daily_confirmed['daily confirmed'].tail(30)] + ' </br >' +
+                           '<b>Country</b>: ' +
+                           daily_confirmed['Country/Region'].tail(
+                               30).astype(str) + '<br>'
+                           ),
+
+                    go.Scatter(x=daily_confirmed['date'].tail(30),
+                               y=daily_confirmed['rolling average'].tail(30),
+                               mode='lines',
+                               name='Rolling average',
+                               marker=dict(color='CornflowerBlue'),
+                               hoverinfo='text',
+                               hovertext=[
+                                   f'{x:,.0f}' for x in daily_confirmed['rolling average'].tail(30)]
+                               )],
+           'layout': go.Layout(title={'text': 'Last 30 days in ' + (w_countries), 'y': 0.93, 'x': 0.5, 'xanchor': 'center', 'yanchor': 'top'},
+                               titlefont={'color': 'white', 'size': 20},
+                               font=dict(family='sans-serif',
+                                         color='white', size=12),
+                               paper_bgcolor='#1f2c56',
+                               plot_bgcolor='#1f2c56',
+                               hovermode='closest',
+                               legend={'orientation': 'h', 'bgcolor': '#1f2c56',
+                                       'xanchor': 'center', 'x': 0.5, 'y': -0.7},
+                               margin=dict(r=0, l=55),
+                               xaxis=dict(title='<b>Date</b>',
+                                          color='white',
+                                          showline=True,
+                                          showgrid=True,
+                                          showticklabels=True,
+                                          linecolor='white',
+                                          linewidth=1,
+                                          ticks='outside',
+                                          tickfont=dict(family='Arial', color='white', size=12)),
+                               yaxis=dict(title='<b>Daily cases</b>',
+                                          color='white',
+                                          showline=True,
+                                          showgrid=True,
+                                          showticklabels=True,
+                                          linecolor='white',
+                                          linewidth=1,
+                                          ticks='outside',
+                                          tickfont=dict(family='Arial', color='white', size=12))
                                )
            }
 
