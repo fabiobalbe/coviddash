@@ -50,6 +50,11 @@ covid_data['active'] = covid_data['confirmed'] - \
 covid_data_SUM = covid_data.groupby(
     ['date'])[['confirmed', 'deaths', 'recovered', 'active']].sum().reset_index()
 
+# Create dictionay of locations
+covid_data_list = covid_data[['Country/Region', 'Lat', 'Long']]
+dict_locations = covid_data_list.set_index(
+    ['Country/Region'])[['Lat', 'Long']].T.to_dict('dict')
+
 
 def recuperados():
     resultado = round(((covid_data_SUM['recovered'].iloc[-1] - covid_data_SUM['recovered'].iloc[-2]) / (
@@ -113,7 +118,7 @@ app.layout = html.Div([
         html.Div([
             html.H6(children='Recovered',
                     style={'textAlign': 'center', 'color': 'white'}),
-            html.P(f"{covid_data_SUM['recovered'].iloc[-1]:,.0f}",
+            html.P(f"{covid_data_SUM['recovered'].max():,.0f}",
                    style={'textAlign': 'center', 'color': 'green', 'fontSize': '40px'}),
             html.P(
                 'New: ' +
@@ -183,9 +188,16 @@ app.layout = html.Div([
                 'displayModeBar': 'hover'}
             ),
 
-        ], className='create_container four columns', style={'width': '35%'})
+        ], className='create_container four columns', style={'width': '35%'}),
 
-    ], className='row flex-display')
+    ], className='row flex-display'),
+
+    html.Div([
+        dcc.Graph(id='map_chart', config={
+            'displayModeBar': 'hover'}
+        ),
+    ], className='create_container1 twelve columns')
+
 ], id='mainContainer', style={'display': 'flex', 'flex-direction': 'column'})
 
 
@@ -321,7 +333,7 @@ def update_graph(w_countries):
                                          == w_countries]['deaths'].iloc[-1]
 
     recovered_values = covid_data_byCountry[covid_data_byCountry['Country/Region']
-                                            == w_countries]['recovered'].iloc[-1]
+                                            == w_countries]['recovered'].max()
 
     active_values = covid_data_byCountry[covid_data_byCountry['Country/Region']
                                          == w_countries]['active'].iloc[-1]
@@ -334,6 +346,7 @@ def update_graph(w_countries):
                            marker=dict(colors=colors),
                            hoverinfo='label+value+percent',
                            textinfo='label+value',
+                           hole=.6,
                            rotation=45
                            )],
            'layout': go.Layout(title={'text': 'Total cases in ' + (w_countries), 'y': 0.93, 'x': 0.5, 'xanchor': 'center', 'yanchor': 'top'},
@@ -414,6 +427,52 @@ def update_graph(w_countries):
                                           linewidth=1,
                                           ticks='outside',
                                           tickfont=dict(family='Arial', color='white', size=12))
+                               )
+           }
+
+
+@app.callback(Output('map_chart', 'figure'), [Input('w_countries', 'value')])
+def update_graph(w_countries):
+    covid_data_byPosition = covid_data.groupby(['Lat', 'Long', 'Country/Region'])[
+        ['confirmed', 'deaths', 'recovered', 'active']].max().reset_index()
+
+    country_info = covid_data_byPosition[covid_data_byPosition['Country/Region'] == w_countries]
+
+    if w_countries:
+        zoom = 2
+        zoom_lat = dict_locations[w_countries]['Lat']
+        zoom_long = dict_locations[w_countries]['Long']
+
+    colors = ['orange', 'red', 'green', 'CornflowerBlue']
+
+    return{'data': [go.Scattermapbox(lon=country_info['Long'],
+                                     lat=country_info['Lat'],
+                                     mode='markers',
+                                     marker=go.scattermapbox.Marker(
+                                         size=country_info['confirmed']/1000, color=country_info['confirmed'], colorscale='HSV', showscale=False, sizemode='area', opacity=0.3),
+                                     hoverinfo='text',
+                                     hovertext='</br><b>Country</b>: ' + country_info['Country/Region'].astype(str) + '</br>' +
+                                     '<b>Longitude</b>: ' + country_info['Long'].astype(str) + '</br>' +
+                                     '<b>Latidude</b>: ' + country_info['Lat'].astype(str) + '</br>' +
+                                     '<b>Confirmed cases</b>: ' + [f'{x:,.0f}' for x in country_info['confirmed']] + ' </br >' +
+                                     '<b>Deaths</b>: ' + [f'{x:,.0f}' for x in country_info['deaths']] + ' </br >' +
+                                     '<b>Recovered</b>: ' + [f'{x:,.0f}' for x in country_info['recovered']] + ' </br >' +
+                                     '<b>Active</b>: ' +
+                                     [f'{x:,.0f}' for x in country_info['active']]
+                                     ),
+                    ],
+           'layout': go.Layout(paper_bgcolor='#1f2c56',
+                               plot_bgcolor='#1f2c56',
+                               hovermode='x',
+                               margin=dict(r=0, l=0, b=0, t=0),
+                               mapbox=dict(
+                                   accesstoken='pk.eyJ1IjoiZmFiaW9iYWxiZSIsImEiOiJja3l5MmdjdTMwb24zMnZwM2VtYzFmbGZkIn0.z3iSXzUxixNZIbWpA6pckQ',
+                                   center=go.layout.mapbox.Center(
+                                       lat=zoom_lat, lon=zoom_long),
+                                   style='dark',
+                                   zoom=zoom,
+                               ),
+                               autosize=True
                                )
            }
 
